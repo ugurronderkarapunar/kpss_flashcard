@@ -1,3 +1,91 @@
+import webview
+import json
+import os
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.units import mm
+
+DATA_FILE = "flashcards.json"
+
+class FlashcardAPI:
+    def __init__(self):
+        self.cards = self._load()
+
+    def _load(self):
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return []
+
+    def _save(self):
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(self.cards, f, ensure_ascii=False, indent=2)
+
+    def get_cards(self):
+        """JS tarafından çağrılır, tüm kartları döndürür."""
+        return self.cards
+
+    def save_cards(self, cards_json):
+        """JS tarafından çağrılır, kartları JSON string olarak alır ve kaydeder."""
+        self.cards = json.loads(cards_json)
+        self._save()
+
+    def export_pdf(self, ders):
+        """
+        Seçili derse ait kartları PDF olarak kaydeder.
+        Dosya adı: KPSS_Kartlar_{ders}.pdf
+        """
+        if ders == "Tümü":
+            filtered = self.cards
+        else:
+            filtered = [c for c in self.cards if c.get("ders") == ders]
+
+        if not filtered:
+            return f"'{ders}' dersi için hiç kart bulunamadı."
+
+        dosya_adi = f"KPSS_Kartlar_{ders}.pdf"
+        doc = SimpleDocTemplate(
+            dosya_adi,
+            pagesize=A4,
+            rightMargin=20 * mm,
+            leftMargin=20 * mm,
+            topMargin=20 * mm,
+            bottomMargin=20 * mm
+        )
+        styles = getSampleStyleSheet()
+        normal = styles["Normal"]
+        title_style = styles["Title"]
+        heading_style = styles["Heading2"]
+
+        story = []
+        story.append(Paragraph(f"KPSS Yanlış Cevapları – {ders}", title_style))
+        story.append(Spacer(1, 10 * mm))
+
+        for i, card in enumerate(filtered, 1):
+            story.append(Paragraph(f"{i}. Kart", heading_style))
+            if card.get("soru"):
+                story.append(Paragraph(f"<b>Soru:</b> {card['soru']}", normal))
+            story.append(Paragraph(
+                f"<b>Yanlış cevabın:</b> <font color='red'>{card['yanlis']}</font>", normal))
+            story.append(Paragraph(
+                f"<b>Doğru cevap:</b> <font color='green'>{card['dogru']}</font>", normal))
+            if card.get("harita") and card.get("ipucu"):
+                story.append(Paragraph(f"<b>Harita ipucu:</b> {card['ipucu']}", normal))
+            story.append(Paragraph(
+                f"Kutu: {card.get('box',1)}/5 | Sonraki tekrar: {card.get('nextReview','-')}",
+                normal))
+            story.append(Spacer(1, 5 * mm))
+
+        doc.build(story)
+        return f"✅ PDF oluşturuldu: {dosya_adi}"
+
+
+# ----------------------------------------------------------------------
+# Arayüz HTML’i (orijinal kodun, pywebview ve PDF butonlarıyla güncellenmiş hali)
+# ----------------------------------------------------------------------
+HTML = r"""
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -163,6 +251,15 @@ input:focus, textarea:focus, select:focus{outline:2px solid var(--muted);}
     <button class="tab" data-tab="bolge">🗺️ Bölge Rehberi</button>
   </div>
 
+  <!-- PDF Çıkarma Butonları -->
+  <div style="margin-bottom:18px; display:flex; gap:10px; flex-wrap:wrap;">
+    <button class="btn btn-ghost" onclick="exportPDF('Tarih')">📄 Tarih PDF</button>
+    <button class="btn btn-ghost" onclick="exportPDF('Coğrafya')">📄 Coğrafya PDF</button>
+    <button class="btn btn-ghost" onclick="exportPDF('Vatandaşlık')">📄 Vatandaşlık PDF</button>
+    <button class="btn btn-ghost" onclick="exportPDF('Tümü')">📄 Tüm Kartlar PDF</button>
+    <span id="pdfMsg" style="color:var(--paper); font-size:0.85rem; align-self:center;"></span>
+  </div>
+
   <!-- KART EKLE -->
   <div class="panel view" id="view-ekle">
     <div class="section-title">Yeni yanlış kaydı ekle</div>
@@ -262,12 +359,10 @@ input:focus, textarea:focus, select:focus{outline:2px solid var(--muted);}
 </div>
 
 <script>
-const STORAGE_KEY = 'kpss_flashcards_v1';
 let cards = [];
 let selectedDers = 'Tarih';
 let reviewQueue = [];
 let reviewIdx = 0;
-let revealed = false;
 
 const BOX_INTERVALS = [0, 1, 2, 4, 7, 14]; // box 1..5 -> gün
 
@@ -314,12 +409,11 @@ function textsSimilar(a,b){
 
 async function loadCards(){
   try{
-    const res = await window.storage.get(STORAGE_KEY, false);
-    cards = res && res.value ? JSON.parse(res.value) : [];
+    cards = await pywebview.api.get_cards();
   }catch(e){ cards = []; }
 }
 async function saveCards(){
-  try{ await window.storage.set(STORAGE_KEY, JSON.stringify(cards), false); }
+  try{ await pywebview.api.save_cards(JSON.stringify(cards)); }
   catch(e){ console.error('Kaydetme hatası', e); }
 }
 
@@ -417,7 +511,6 @@ document.getElementById('btnEkle').addEventListener('click', async ()=>{
   cards.push(newCard);
   await saveCards();
 
-  // Yeni kartın çakışma yaratıp yaratmadığını kontrol et
   const relatedConflicts = cards.filter(c => c.id!==newCard.id &&
     (textsSimilar(newCard.yanlis, c.dogru) || textsSimilar(c.yanlis, newCard.dogru)));
   if(relatedConflicts.length>0){
@@ -428,7 +521,7 @@ document.getElementById('btnEkle').addEventListener('click', async ()=>{
     okEl.classList.add('show');
   }
   clearForm();
-  if(relatedConflicts.length>0){ warnEl.classList.add('show'); } // formu temizleyince banner da silinmesin diye tekrar aç
+  if(relatedConflicts.length>0){ warnEl.classList.add('show'); }
   renderHeaderCounts();
 });
 
@@ -450,10 +543,8 @@ function startReview(){
     if(mode==='due') return !c.nextReview || c.nextReview <= todayISO();
     return true;
   });
-  // en acil (en eski nextReview) önce
   reviewQueue.sort((a,b)=> (a.nextReview||'').localeCompare(b.nextReview||''));
   reviewIdx = 0;
-  revealed = false;
   renderReviewCard();
 }
 
@@ -471,7 +562,6 @@ function renderReviewCard(){
     return;
   }
   const c = reviewQueue[reviewIdx];
-  revealed = false;
   const front = c.soru ? c.soru : `❌ Bu soruda "${c.yanlis}" cevabını vermiştin. Doğrusu neydi?`;
   let harItaHtml = '';
   if(c.harita){
@@ -622,6 +712,18 @@ document.getElementById('ilSearch').addEventListener('input', (e)=>{
   sonuc.textContent = bulunan ? `📍 ${bulunan.il} → ${bulunan.bolge} Bölgesi` : '❌ İl bulunamadı, yazımı kontrol et.';
 });
 
+// ---------- PDF ÇIKARMA ----------
+async function exportPDF(ders) {
+  const msgDiv = document.getElementById('pdfMsg');
+  msgDiv.textContent = "PDF oluşturuluyor...";
+  try {
+    let result = await pywebview.api.export_pdf(ders);
+    msgDiv.textContent = result;
+  } catch(e) {
+    msgDiv.textContent = "PDF oluşturulamadı: " + e;
+  }
+}
+
 // ---------- INIT ----------
 (async function init(){
   await loadCards();
@@ -631,3 +733,9 @@ document.getElementById('ilSearch').addEventListener('input', (e)=>{
 </script>
 </body>
 </html>
+"""
+
+if __name__ == '__main__':
+    api = FlashcardAPI()
+    window = webview.create_window('KPSS Flashcard', html=HTML, js_api=api)
+    webview.start()
