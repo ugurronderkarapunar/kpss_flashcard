@@ -24,19 +24,13 @@ class FlashcardAPI:
             json.dump(self.cards, f, ensure_ascii=False, indent=2)
 
     def get_cards(self):
-        """JS tarafından çağrılır, tüm kartları döndürür."""
         return self.cards
 
     def save_cards(self, cards_json):
-        """JS tarafından çağrılır, kartları JSON string olarak alır ve kaydeder."""
         self.cards = json.loads(cards_json)
         self._save()
 
     def export_pdf(self, ders):
-        """
-        Seçili derse ait kartları PDF olarak kaydeder.
-        Dosya adı: KPSS_Kartlar_{ders}.pdf
-        """
         if ders == "Tümü":
             filtered = self.cards
         else:
@@ -82,9 +76,6 @@ class FlashcardAPI:
         return f"✅ PDF oluşturuldu: {dosya_adi}"
 
 
-# ----------------------------------------------------------------------
-# Arayüz HTML’i (orijinal kodun, pywebview ve PDF butonlarıyla güncellenmiş hali)
-# ----------------------------------------------------------------------
 HTML = r"""
 <!DOCTYPE html>
 <html lang="tr">
@@ -160,14 +151,12 @@ input:focus, textarea:focus, select:focus{outline:2px solid var(--muted);}
   border-left:4px solid var(--cografya);color:#C9F0DA;font-size:0.85rem;display:none;}
 .ok-banner.show{display:block;}
 
-/* Filtre çubuğu */
 .filter-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center;}
 .filter-row select, .filter-row input{width:auto;}
 .pill-toggle{display:flex;gap:6px;background:var(--panel2);padding:4px;border-radius:20px;border:1px solid var(--line);}
 .pill-toggle button{border:none;background:none;color:var(--muted);padding:6px 14px;border-radius:16px;font-size:0.78rem;font-weight:600;cursor:pointer;}
 .pill-toggle button.active{background:var(--paper);color:var(--ink);}
 
-/* Flashcard */
 .queue-info{font-family:'IBM Plex Mono',monospace;font-size:0.8rem;color:var(--muted);margin-bottom:16px;}
 .card-stage{display:flex;justify-content:center;padding:10px 0 6px;}
 .flashcard{
@@ -176,7 +165,7 @@ input:focus, textarea:focus, select:focus{outline:2px solid var(--muted);}
   transition:transform 0.15s ease; min-height:180px;
 }
 .flashcard:hover{transform:rotate(-0.4deg);}
-.flashcard::before{ /* tab */
+.flashcard::before{
   content:"";position:absolute;top:-10px;left:24px;width:64px;height:16px;border-radius:6px 6px 0 0;
 }
 .flashcard.Tarih::before{background:var(--tarih);}
@@ -204,14 +193,12 @@ input:focus, textarea:focus, select:focus{outline:2px solid var(--muted);}
 .empty-state{text-align:center;padding:50px 20px;color:var(--muted);}
 .empty-state .big{font-size:2rem;margin-bottom:10px;}
 
-/* Çakışmalar */
 .conflict-item{padding:14px 16px;border-radius:8px;background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.4);margin-bottom:12px;}
 .conflict-item .cwarn{color:#F5C6C0;font-size:0.78rem;font-weight:600;margin-bottom:8px;}
 .conflict-pair{display:flex;gap:14px;flex-wrap:wrap;}
 .conflict-card{flex:1;min-width:200px;background:var(--panel2);border-radius:6px;padding:10px 12px;font-size:0.85rem;}
 .conflict-card .lbl{font-size:0.68rem;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
 
-/* Tüm kartlar tablo */
 .card-row{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:8px;background:var(--panel2);margin-bottom:8px;}
 .card-row .ders-tag{flex-shrink:0;}
 .card-row .info{flex:1;min-width:0;}
@@ -221,7 +208,6 @@ input:focus, textarea:focus, select:focus{outline:2px solid var(--muted);}
 .icon-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:4px 8px;}
 .icon-btn:hover{color:var(--danger);}
 
-/* Bölge rehberi */
 .region-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;}
 .region-card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:16px;}
 .region-card h3{font-family:'Fraunces',serif;color:var(--paper);margin:0 0 4px;font-size:1rem;}
@@ -251,7 +237,6 @@ input:focus, textarea:focus, select:focus{outline:2px solid var(--muted);}
     <button class="tab" data-tab="bolge">🗺️ Bölge Rehberi</button>
   </div>
 
-  <!-- PDF Çıkarma Butonları -->
   <div style="margin-bottom:18px; display:flex; gap:10px; flex-wrap:wrap;">
     <button class="btn btn-ghost" onclick="exportPDF('Tarih')">📄 Tarih PDF</button>
     <button class="btn btn-ghost" onclick="exportPDF('Coğrafya')">📄 Coğrafya PDF</button>
@@ -364,7 +349,7 @@ let selectedDers = 'Tarih';
 let reviewQueue = [];
 let reviewIdx = 0;
 
-const BOX_INTERVALS = [0, 1, 2, 4, 7, 14]; // box 1..5 -> gün
+const BOX_INTERVALS = [0, 1, 2, 4, 7, 14];
 
 const BOLGELER = {
   "Marmara": ["İstanbul","Kocaeli","Sakarya","Bilecik","Bursa","Yalova","Çanakkale","Balıkesir","Tekirdağ","Edirne","Kırklareli"],
@@ -432,7 +417,6 @@ function computeConflicts(){
   return conflicts;
 }
 
-// ---------- RENDER: HEADER / TABS ----------
 function renderHeaderCounts(){
   document.getElementById('totalStamp').textContent = cards.length + ' kart';
   const due = cards.filter(c => !c.nextReview || c.nextReview <= todayISO()).length;
@@ -443,7 +427,6 @@ function renderHeaderCounts(){
   if(conf>0){ confBadge.style.display='inline-block'; confBadge.textContent=conf; } else { confBadge.style.display='none'; }
 }
 
-// ---------- TAB SWITCHING ----------
 document.querySelectorAll('.tab').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
@@ -458,7 +441,6 @@ document.querySelectorAll('.tab').forEach(btn=>{
   });
 });
 
-// ---------- KART EKLE ----------
 document.querySelectorAll('.ders-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('.ders-btn').forEach(b=>b.classList.remove('sel'));
@@ -525,7 +507,6 @@ document.getElementById('btnEkle').addEventListener('click', async ()=>{
   renderHeaderCounts();
 });
 
-// ---------- TEKRAR ET ----------
 document.getElementById('revDers').addEventListener('change', startReview);
 document.querySelectorAll('#view-tekrar .pill-toggle button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -623,7 +604,6 @@ function escapeHtml(s){
   return (s||"").replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 
-// ---------- ÇAKIŞMALAR ----------
 function renderConflicts(){
   const list = document.getElementById('conflictList');
   const conflicts = computeConflicts();
@@ -650,7 +630,6 @@ function renderConflicts(){
   `).join('');
 }
 
-// ---------- TÜM KARTLAR ----------
 document.getElementById('allDers').addEventListener('change', renderAllCards);
 document.getElementById('allSearch').addEventListener('input', renderAllCards);
 
@@ -689,7 +668,6 @@ function renderAllCards(){
   });
 }
 
-// ---------- BÖLGE REHBERİ ----------
 function renderRegions(){
   const grid = document.getElementById('regionGrid');
   grid.innerHTML = Object.entries(BOLGELER).map(([ad, iller])=>`
@@ -712,7 +690,6 @@ document.getElementById('ilSearch').addEventListener('input', (e)=>{
   sonuc.textContent = bulunan ? `📍 ${bulunan.il} → ${bulunan.bolge} Bölgesi` : '❌ İl bulunamadı, yazımı kontrol et.';
 });
 
-// ---------- PDF ÇIKARMA ----------
 async function exportPDF(ders) {
   const msgDiv = document.getElementById('pdfMsg');
   msgDiv.textContent = "PDF oluşturuluyor...";
@@ -724,7 +701,6 @@ async function exportPDF(ders) {
   }
 }
 
-// ---------- INIT ----------
 (async function init(){
   await loadCards();
   renderHeaderCounts();
